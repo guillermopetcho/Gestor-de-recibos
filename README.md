@@ -1,3 +1,4 @@
+```text
 Mi-Admin/
 ├── run.py                 <-- Nuevo lanzador limpio y directo.
 ├── app/                   <-- Todo el código del programa.
@@ -14,3 +15,4 @@ Mi-Admin/
 ├── data/                  <-- Aquí vive tu mi_admin.db (Protegido).
 ├── config/                <-- Espacio para futuros archivos .ini o temas.
 └── recibos/               <-- Carpeta de salida por defecto.
+```
