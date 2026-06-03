@@ -1,0 +1,18 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Directorios de datos y salida locales (No subir al repositorio)
+data/
+recibos/
+config/
+
+# Entornos virtuales
+venv/
+env/
+.env
+
+# IDEs
+.vscode/
+.idea/
