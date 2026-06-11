@@ -7,6 +7,7 @@ from app.core import database
 from app.core import excel_manager
 from app.ui import gestion_ui
 from app.ui import config_ui
+from app.ui import edicion_masiva_ui
 
 class MiAdminApp(QMainWindow):
     def __init__(self):
@@ -53,21 +54,43 @@ class MiAdminApp(QMainWindow):
         self.panel_cabecera = QWidget()
         self.panel_cabecera.setStyleSheet("background-color: #2D2D30; border: 1px solid #555; border-radius: 5px;")
         
-        from PyQt6.QtWidgets import QGridLayout
+        from PyQt6.QtWidgets import QGridLayout, QLineEdit
         lay_cab = QGridLayout(self.panel_cabecera)
         
         self.lbl_cab_edif = QLabel("<b>Edificio:</b> -")
         self.lbl_cab_ident = QLabel("<b>Identificador:</b> -")
-        self.lbl_cab_per = QLabel("<b>Período:</b> -")
-        self.lbl_cab_fecha = QLabel("<b>Fecha:</b> -")
+        
+        lay_per = QHBoxLayout()
+        lay_per.setContentsMargins(0,0,0,0)
+        lay_per.addWidget(QLabel("<b>Período:</b>"))
+        self.edit_cab_per = QLineEdit()
+        self.edit_cab_per.editingFinished.connect(self.guardar_cabecera)
+        lay_per.addWidget(self.edit_cab_per)
+        
+        lay_fecha = QHBoxLayout()
+        lay_fecha.setContentsMargins(0,0,0,0)
+        lay_fecha.addWidget(QLabel("<b>Fecha:</b>"))
+        self.edit_cab_fecha = QLineEdit()
+        self.edit_cab_fecha.editingFinished.connect(self.guardar_cabecera)
+        lay_fecha.addWidget(self.edit_cab_fecha)
+        
+        lay_nota = QHBoxLayout()
+        lay_nota.setContentsMargins(0,0,0,0)
+        lay_nota.addWidget(QLabel("<b>Nota:</b>"))
+        self.edit_cab_nota = QLineEdit()
+        self.edit_cab_nota.editingFinished.connect(self.guardar_cabecera)
+        lay_nota.addWidget(self.edit_cab_nota)
+        
         self.lbl_cab_tot = QLabel("<b>Total a Cobrar:</b> $0.00")
         self.lbl_cab_tot.setStyleSheet("color: #2ECC71; font-weight: bold; font-size: 13px;")
         
         lay_cab.addWidget(self.lbl_cab_edif, 0, 0)
         lay_cab.addWidget(self.lbl_cab_ident, 0, 1)
-        lay_cab.addWidget(self.lbl_cab_per, 1, 0)
-        lay_cab.addWidget(self.lbl_cab_fecha, 1, 1)
-        lay_cab.addWidget(self.lbl_cab_tot, 1, 2)
+        lay_cab.addWidget(self.lbl_cab_tot, 0, 2)
+        
+        lay_cab.addLayout(lay_per, 1, 0)
+        lay_cab.addLayout(lay_fecha, 1, 1)
+        lay_cab.addLayout(lay_nota, 1, 2)
         
         self.tabla_items = QTableWidget(0, 5)
         self.tabla_items.setHorizontalHeaderLabels(["Cant.", "Categoría", "Concepto", "Precio Unit.", "Subtotal"])
@@ -92,6 +115,8 @@ class MiAdminApp(QMainWindow):
         self.arbol_propiedades = QTreeWidget()
         self.arbol_propiedades.setHeaderHidden(True)
         self.arbol_propiedades.itemChanged.connect(self.on_arbol_item_changed)
+        self.arbol_propiedades.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.arbol_propiedades.customContextMenuRequested.connect(self.mostrar_menu_arbol)
         
         botones_layout = QVBoxLayout()
         self.btn_configuracion = QPushButton("Configuración")
@@ -102,12 +127,17 @@ class MiAdminApp(QMainWindow):
         self.btn_gestion.setStyleSheet("color: #2980B9; font-weight: bold; padding:10px;")
         self.btn_gestion.clicked.connect(self.abrir_gestion_propiedades)
         
+        self.btn_edicion_masiva = QPushButton("Edición Masiva")
+        self.btn_edicion_masiva.setStyleSheet("color: #8E44AD; font-weight: bold; padding:10px;")
+        self.btn_edicion_masiva.clicked.connect(self.abrir_edicion_masiva)
+        
         self.btn_generar = QPushButton("Generar Recibos")
         self.btn_generar.setStyleSheet("background-color: #27AE60; color: white; font-weight: bold; font-size: 14px; padding:15px;")
         self.btn_generar.clicked.connect(self.generar_recibos_seleccionados)
         
         botones_layout.addWidget(self.btn_configuracion)
         botones_layout.addWidget(self.btn_gestion)
+        botones_layout.addWidget(self.btn_edicion_masiva)
         botones_layout.addSpacing(10)
         botones_layout.addWidget(self.btn_generar)
         
@@ -126,6 +156,16 @@ class MiAdminApp(QMainWindow):
         self.tabla_items.cellChanged.connect(self.on_item_modificado)
         self._actualizando_tabla = False
 
+    def guardar_cabecera(self):
+        selected_rows = self.lista_recibos.selectionModel().selectedRows()
+        if len(selected_rows) != 1: return
+        r_id = self.lista_recibos.item(selected_rows[0].row(), 0).data(Qt.ItemDataRole.UserRole)
+        periodo = self.edit_cab_per.text().strip()
+        fecha = self.edit_cab_fecha.text().strip()
+        nota = self.edit_cab_nota.text().strip()
+        database.actualizar_recibo(r_id, periodo=periodo, nota=nota, fecha_emision=fecha)
+        self.lista_recibos.setItem(selected_rows[0].row(), 3, QTableWidgetItem(periodo))
+
     def on_arbol_item_changed(self, item, column):
         if item.data(0, Qt.ItemDataRole.UserRole+1) == "edificio":
             self.arbol_propiedades.blockSignals(True)
@@ -133,6 +173,33 @@ class MiAdminApp(QMainWindow):
             for i in range(item.childCount()):
                 item.child(i).setCheckState(0, estado)
             self.arbol_propiedades.blockSignals(False)
+
+    def mostrar_menu_arbol(self, pos):
+        item = self.arbol_propiedades.itemAt(pos)
+        if not item: return
+        tipo = item.data(0, Qt.ItemDataRole.UserRole+1)
+        item_id = item.data(0, Qt.ItemDataRole.UserRole)
+        
+        menu = QMenu(self)
+        accion_conceptos = menu.addAction("Configurar Conceptos (Rápido) ⚡")
+        
+        accion = menu.exec(self.arbol_propiedades.viewport().mapToGlobal(pos))
+        if accion == accion_conceptos:
+            import json
+            if tipo == "departamento":
+                deptos = database.obtener_departamentos()
+                dep = next((d for d in deptos if d["id"] == item_id), None)
+                if dep:
+                    diag = gestion_ui.VentanaConceptos(self, dep.get("conceptos_default", ""), f"Conceptos Particulares - Depto {dep['identificador']}")
+                    if diag.exec():
+                        database.actualizar_conceptos_departamento(item_id, json.dumps(diag.conceptos))
+            elif tipo == "edificio":
+                edifs = database.obtener_edificios()
+                edif = next((e for e in edifs if e["id"] == item_id), None)
+                if edif:
+                    diag = gestion_ui.VentanaConceptos(self, edif.get("conceptos_default", ""), f"Conceptos Generales - Edificio {edif['nombre']}")
+                    if diag.exec():
+                        database.actualizar_conceptos_edificio(item_id, json.dumps(diag.conceptos))
 
     def mostrar_menu_recibos(self, pos):
         selected = self.lista_recibos.selectedItems()
@@ -252,8 +319,20 @@ class MiAdminApp(QMainWindow):
             self.label_detalle.setText("<b>Detalle del Recibo: (Selecciona uno arriba)</b>")
             self.lbl_cab_edif.setText("<b>Edificio:</b> -")
             self.lbl_cab_ident.setText("<b>Identificador:</b> -")
-            self.lbl_cab_per.setText("<b>Período:</b> -")
-            self.lbl_cab_fecha.setText("<b>Fecha:</b> -")
+            
+            self.edit_cab_per.blockSignals(True)
+            self.edit_cab_fecha.blockSignals(True)
+            self.edit_cab_nota.blockSignals(True)
+            self.edit_cab_per.clear()
+            self.edit_cab_fecha.clear()
+            self.edit_cab_nota.clear()
+            self.edit_cab_per.setEnabled(False)
+            self.edit_cab_fecha.setEnabled(False)
+            self.edit_cab_nota.setEnabled(False)
+            self.edit_cab_per.blockSignals(False)
+            self.edit_cab_fecha.blockSignals(False)
+            self.edit_cab_nota.blockSignals(False)
+            
             self.lbl_cab_tot.setText("<b>Total a Cobrar:</b> $0.00")
             return
             
@@ -281,8 +360,20 @@ class MiAdminApp(QMainWindow):
             self.label_detalle.setText(f"<b>📄 Resumen de Selección Múltiple ({len(r_ids)} recibos)</b>")
             self.lbl_cab_edif.setText(f"<b>Edificios:</b> {'; '.join(edificios)}")
             self.lbl_cab_ident.setText(f"<b>Identificadores:</b> {'; '.join(identificadores)}")
-            self.lbl_cab_per.setText(f"<b>Períodos:</b> {'; '.join(periodos)}")
-            self.lbl_cab_fecha.setText(f"<b>Fechas:</b> {'; '.join(fechas)}")
+            
+            self.edit_cab_per.blockSignals(True)
+            self.edit_cab_fecha.blockSignals(True)
+            self.edit_cab_nota.blockSignals(True)
+            self.edit_cab_per.setText("; ".join(periodos))
+            self.edit_cab_fecha.setText("; ".join(fechas))
+            self.edit_cab_nota.clear()
+            self.edit_cab_per.setEnabled(False)
+            self.edit_cab_fecha.setEnabled(False)
+            self.edit_cab_nota.setEnabled(False)
+            self.edit_cab_per.blockSignals(False)
+            self.edit_cab_fecha.blockSignals(False)
+            self.edit_cab_nota.blockSignals(False)
+            
             self.lbl_cab_tot.setText(f"<b>Total Combinado:</b> ${total_global:,.2f}")
             self._actualizando_tabla = False
 
@@ -296,8 +387,20 @@ class MiAdminApp(QMainWindow):
             self.label_detalle.setText(f"<b>📄 Resumen de Recibo</b>")
             self.lbl_cab_edif.setText(f"<b>Edificio:</b> {r['edificio_nombre']}")
             self.lbl_cab_ident.setText(f"<b>Identificador:</b> {r['identificador']}")
-            self.lbl_cab_per.setText(f"<b>Período:</b> {r['periodo']}")
-            self.lbl_cab_fecha.setText(f"<b>Fecha:</b> {str(r['fecha_emision']).split(' ')[0]}")
+            
+            self.edit_cab_per.blockSignals(True)
+            self.edit_cab_fecha.blockSignals(True)
+            self.edit_cab_nota.blockSignals(True)
+            self.edit_cab_per.setText(r['periodo'])
+            self.edit_cab_fecha.setText(str(r['fecha_emision']).split(' ')[0])
+            self.edit_cab_nota.setText(r.get('nota', '') or '')
+            self.edit_cab_per.setEnabled(True)
+            self.edit_cab_fecha.setEnabled(True)
+            self.edit_cab_nota.setEnabled(True)
+            self.edit_cab_per.blockSignals(False)
+            self.edit_cab_fecha.blockSignals(False)
+            self.edit_cab_nota.blockSignals(False)
+            
             self.lbl_cab_tot.setText(f"<b>Total a Cobrar:</b> ${r['total']:,.2f}")
             
         items = database.obtener_items_recibo(recibo_id)
@@ -349,6 +452,13 @@ class MiAdminApp(QMainWindow):
         dialogo.exec()
         self.actualizar_arbol_propiedades()
 
+    def abrir_edicion_masiva(self):
+        dialogo = edicion_masiva_ui.VentanaEdicionMasiva(self)
+        if dialogo.exec():
+            # Actualizamos la vista si se hicieron cambios
+            self.actualizar_lista_recibos()
+            self.on_recibo_seleccionado()
+
     def generar_recibos_seleccionados(self):
         deptos_tildados = []
         for i in range(self.arbol_propiedades.topLevelItemCount()):
@@ -366,13 +476,38 @@ class MiAdminApp(QMainWindow):
         selected = self.lista_recibos.selectedItems()
         
         if deptos_tildados:
-            import datetime
+            import datetime, json
             mes_actual = datetime.datetime.now().strftime("%m/%Y")
+            deptos_db = database.obtener_departamentos()
+            edificios_db = database.obtener_edificios()
+            
             for d_id in deptos_tildados:
                 r_id = database.crear_recibo(d_id, mes_actual)
-                database.agregar_item(r_id, "Alquiler", "Alquiler", 1, 0)
-                database.agregar_item(r_id, "Servicios", "Luz", 1, 0)
-                database.agregar_item(r_id, "Servicios", "Agua", 1, 0)
+                
+                dep = next((d for d in deptos_db if d["id"] == d_id), None)
+                edif = next((e for e in edificios_db if e["id"] == dep["edificio_id"]), None) if dep else None
+                
+                conceptos = []
+                # 1. Building Concepts
+                if edif and edif.get("conceptos_default"):
+                    try: conceptos.extend(json.loads(edif["conceptos_default"]))
+                    except: pass
+                
+                # 2. Department Concepts
+                if dep and dep.get("conceptos_default"):
+                    try: conceptos.extend(json.loads(dep["conceptos_default"]))
+                    except: pass
+                    
+                # 3. Fallback
+                if not conceptos:
+                    conceptos = [
+                        {"categoria": "Alquiler", "concepto": "Alquiler", "precio": 0},
+                        {"categoria": "Servicios", "concepto": "Luz", "precio": 0},
+                        {"categoria": "Servicios", "concepto": "Agua", "precio": 0}
+                    ]
+                    
+                for c in conceptos:
+                    database.agregar_item(r_id, c.get("categoria", ""), c.get("concepto", ""), 1, c.get("precio", 0))
             
             # Limpiar tildes
             for i in range(self.arbol_propiedades.topLevelItemCount()):

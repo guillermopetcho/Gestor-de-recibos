@@ -2,8 +2,17 @@ import sqlite3
 import os
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent.parent.parent / "data" / "mi_admin.db"
+import sys
 
+# Determinar la ruta base dependiendo de si es un ejecutable o script
+if getattr(sys, 'frozen', False):
+    # Si es un ejecutable (PyInstaller), la base es la carpeta donde está el .exe
+    BASE_DIR = Path(sys.executable).parent
+else:
+    # Si es el script original, la base es la raíz del proyecto (3 niveles arriba de database.py)
+    BASE_DIR = Path(__file__).parent.parent.parent
+
+DB_PATH = BASE_DIR / "data" / "mi_admin.db"
 def get_connection():
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
@@ -31,6 +40,11 @@ def init_database():
     except sqlite3.OperationalError:
         pass
 
+    try:
+        c.execute("ALTER TABLE edificios ADD COLUMN conceptos_default TEXT")
+    except sqlite3.OperationalError:
+        pass
+
     c.execute("""CREATE TABLE IF NOT EXISTS departamentos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         edificio_id INTEGER NOT NULL,
@@ -41,8 +55,14 @@ def init_database():
         dia_vencimiento_pago INTEGER DEFAULT 10,
         aumentos_notas TEXT,
         activo INTEGER DEFAULT 1,
+        conceptos_default TEXT,
         FOREIGN KEY (edificio_id) REFERENCES edificios(id)
     )""")
+    
+    try:
+        c.execute("ALTER TABLE departamentos ADD COLUMN conceptos_default TEXT")
+    except sqlite3.OperationalError:
+        pass
 
     c.execute("""CREATE TABLE IF NOT EXISTS conceptos_edificio (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -109,20 +129,26 @@ def obtener_edificios():
     conn.close()
     return [dict(r) for r in rows]
 
-def agregar_edificio(nombre, direccion, ruta_plantilla="", ruta_guardado="", mapeo_celdas=""):
+def agregar_edificio(nombre, direccion, ruta_plantilla="", ruta_guardado="", mapeo_celdas="", conceptos_default=""):
     conn = get_connection()
     c = conn.cursor()
-    c.execute("INSERT INTO edificios (nombre, direccion, ruta_plantilla, ruta_guardado, mapeo_celdas) VALUES (?, ?, ?, ?, ?)",
-              (nombre, direccion, ruta_plantilla, ruta_guardado, mapeo_celdas))
+    c.execute("INSERT INTO edificios (nombre, direccion, ruta_plantilla, ruta_guardado, mapeo_celdas, conceptos_default) VALUES (?, ?, ?, ?, ?, ?)",
+              (nombre, direccion, ruta_plantilla, ruta_guardado, mapeo_celdas, conceptos_default))
     new_id = c.lastrowid
     conn.commit()
     conn.close()
     return new_id
 
-def actualizar_edificio(edificio_id, nombre, direccion, ruta_plantilla, ruta_guardado, mapeo_celdas=""):
+def actualizar_edificio(edificio_id, nombre, direccion, ruta_plantilla, ruta_guardado, mapeo_celdas="", conceptos_default=""):
     conn = get_connection()
-    conn.execute("UPDATE edificios SET nombre=?, direccion=?, ruta_plantilla=?, ruta_guardado=?, mapeo_celdas=? WHERE id=?",
-                 (nombre, direccion, ruta_plantilla, ruta_guardado, mapeo_celdas, edificio_id))
+    conn.execute("UPDATE edificios SET nombre=?, direccion=?, ruta_plantilla=?, ruta_guardado=?, mapeo_celdas=?, conceptos_default=? WHERE id=?",
+                 (nombre, direccion, ruta_plantilla, ruta_guardado, mapeo_celdas, conceptos_default, edificio_id))
+    conn.commit()
+    conn.close()
+
+def actualizar_conceptos_edificio(edificio_id, conceptos_default):
+    conn = get_connection()
+    conn.execute("UPDATE edificios SET conceptos_default=? WHERE id=?", (conceptos_default, edificio_id))
     conn.commit()
     conn.close()
 
@@ -140,17 +166,23 @@ def obtener_departamentos(edificio_id=None):
     conn.close()
     return [dict(r) for r in rows]
 
-def guardar_departamento(dep_id, edificio_id, identificador, inquilino, inicio, fin, dia, aumentos):
+def guardar_departamento(dep_id, edificio_id, identificador, inquilino, inicio, fin, dia, aumentos, conceptos_default=""):
     conn = get_connection()
     c = conn.cursor()
     if dep_id:
         c.execute("""UPDATE departamentos SET identificador=?, inquilino=?, inicio_contrato=?, 
-                     fin_contrato=?, dia_vencimiento_pago=?, aumentos_notas=? WHERE id=?""",
-                  (identificador, inquilino, inicio, fin, dia, aumentos, dep_id))
+                     fin_contrato=?, dia_vencimiento_pago=?, aumentos_notas=?, conceptos_default=? WHERE id=?""",
+                  (identificador, inquilino, inicio, fin, dia, aumentos, conceptos_default, dep_id))
     else:
         c.execute("""INSERT INTO departamentos (edificio_id, identificador, inquilino, inicio_contrato, 
-                     fin_contrato, dia_vencimiento_pago, aumentos_notas) VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                  (edificio_id, identificador, inquilino, inicio, fin, dia, aumentos))
+                     fin_contrato, dia_vencimiento_pago, aumentos_notas, conceptos_default) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                  (edificio_id, identificador, inquilino, inicio, fin, dia, aumentos, conceptos_default))
+    conn.commit()
+    conn.close()
+
+def actualizar_conceptos_departamento(dep_id, conceptos_default):
+    conn = get_connection()
+    conn.execute("UPDATE departamentos SET conceptos_default=? WHERE id=?", (conceptos_default, dep_id))
     conn.commit()
     conn.close()
 
@@ -208,7 +240,7 @@ def crear_recibo(departamento_id, periodo):
     conn.close()
     return new_id
 
-def actualizar_recibo(recibo_id, estado=None, archivo_excel=None, total=None, periodo=None, nota=None):
+def actualizar_recibo(recibo_id, estado=None, archivo_excel=None, total=None, periodo=None, nota=None, fecha_emision=None):
     conn = get_connection()
     campos = []
     valores = []
@@ -217,6 +249,7 @@ def actualizar_recibo(recibo_id, estado=None, archivo_excel=None, total=None, pe
     if total is not None: campos.append("total=?"); valores.append(total)
     if periodo is not None: campos.append("periodo=?"); valores.append(periodo)
     if nota is not None: campos.append("nota=?"); valores.append(nota)
+    if fecha_emision is not None: campos.append("fecha_emision=?"); valores.append(fecha_emision)
     if campos:
         valores.append(recibo_id)
         conn.execute(f"UPDATE recibos SET {', '.join(campos)} WHERE id=?", valores)

@@ -16,3 +16,14 @@ env/
 # IDEs
 .vscode/
 .idea/
+
+# PyInstaller y compilaciones
+build/
+dist/
+*.spec
+*.exe
+
+# Entorno de Wine y scripts temporales
+.wine_env/
+python-installer.exe
+build_windows.sh

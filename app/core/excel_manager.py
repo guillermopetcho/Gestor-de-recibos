@@ -18,7 +18,14 @@ def generar_recibo_excel(recibo_id):
     if not ruta_guardado: # Si el edificio no tiene, usar la global
         ruta_guardado = config.get("ruta_guardado", "recibos")
         
-    ruta_base = Path(ruta_guardado) if os.path.isabs(ruta_guardado) else Path(__file__).parent / ruta_guardado
+    import sys
+    # Determinar la ruta base
+    if getattr(sys, 'frozen', False):
+        BASE_DIR = Path(sys.executable).parent
+    else:
+        BASE_DIR = Path(__file__).parent.parent.parent
+
+    ruta_base = Path(ruta_guardado) if os.path.isabs(ruta_guardado) else BASE_DIR / ruta_guardado
     ruta_base.mkdir(parents=True, exist_ok=True)
     
     nombre_archivo = f"Recibo_{recibo['edificio_nombre'].replace(' ', '_')}_{recibo['identificador'].replace(' ', '_')}_{recibo['periodo'].replace('/', '-')}.xlsx"
@@ -157,7 +164,21 @@ def generar_recibo_excel(recibo_id):
     ruta_final = str(ruta_archivo)
     if formato_salida == "Excel y PDF":
         try:
-            comando = ["libreoffice", "--headless", "--nologo", "--nofirststartwizard", "--convert-to", "pdf", str(ruta_archivo), "--outdir", str(ruta_base)]
+            import shutil
+            comando_base = "libreoffice"
+            if platform.system() == "Windows":
+                comando_base = "soffice"
+                if not shutil.which(comando_base):
+                    rutas_comunes = [
+                        r"C:\Program Files\LibreOffice\program\soffice.exe",
+                        r"C:\Program Files (x86)\LibreOffice\program\soffice.exe"
+                    ]
+                    for ruta in rutas_comunes:
+                        if os.path.exists(ruta):
+                            comando_base = ruta
+                            break
+            
+            comando = [comando_base, "--headless", "--nologo", "--nofirststartwizard", "--convert-to", "pdf", str(ruta_archivo), "--outdir", str(ruta_base)]
             subprocess.run(comando, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             ruta_final = str(ruta_archivo).replace('.xlsx', '.pdf')
         except Exception as e:

@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, 
                              QLineEdit, QPushButton, QMessageBox, QTreeWidget,
-                             QTreeWidgetItem, QStackedWidget, QWidget, QFileDialog, QGroupBox)
+                             QTreeWidgetItem, QStackedWidget, QWidget, QFileDialog, QGroupBox, QComboBox)
 from PyQt6.QtCore import Qt
 from app.core import database
 import json
@@ -44,6 +44,87 @@ class VentanaMapeo(QDialog):
 
     def guardar(self):
         self.mapeo = {k: v.text().strip().upper() for k, v in self.fields.items()}
+        self.accept()
+
+from PyQt6.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView
+
+class VentanaConceptos(QDialog):
+    def __init__(self, parent=None, conceptos_actual="", titulo="Configurar Conceptos"):
+        super().__init__(parent)
+        self.setWindowTitle(titulo)
+        self.resize(500, 300)
+        try:
+            self.conceptos = json.loads(conceptos_actual) if conceptos_actual else []
+        except:
+            self.conceptos = []
+        self.init_ui()
+
+    def init_ui(self):
+        layout = QVBoxLayout(self)
+        
+        self.tabla = QTableWidget(0, 3)
+        self.tabla.setHorizontalHeaderLabels(["Categoría", "Concepto", "Precio Unitario"])
+        self.tabla.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        
+        for c in self.conceptos:
+            row = self.tabla.rowCount()
+            self.tabla.insertRow(row)
+            
+            cb_cat = QComboBox()
+            cb_cat.setEditable(True)
+            cb_cat.addItems(["Servicios", "Alquiler", "Impuestos", "Municipal", "Otros"])
+            cb_cat.setCurrentText(c.get("categoria", ""))
+            self.tabla.setCellWidget(row, 0, cb_cat)
+            
+            self.tabla.setItem(row, 1, QTableWidgetItem(c.get("concepto", "")))
+            self.tabla.setItem(row, 2, QTableWidgetItem(str(c.get("precio", 0))))
+            
+        btn_add = QPushButton("+ Agregar Concepto")
+        btn_add.clicked.connect(self.agregar_fila)
+        
+        btn_del = QPushButton("- Quitar Seleccionado")
+        btn_del.clicked.connect(self.quitar_fila)
+        
+        btn_save = QPushButton("Guardar Conceptos")
+        btn_save.clicked.connect(self.guardar)
+        
+        lay_btns = QHBoxLayout()
+        lay_btns.addWidget(btn_add)
+        lay_btns.addWidget(btn_del)
+        
+        layout.addLayout(lay_btns)
+        layout.addWidget(self.tabla)
+        layout.addWidget(btn_save)
+
+    def agregar_fila(self):
+        row = self.tabla.rowCount()
+        self.tabla.insertRow(row)
+        
+        cb_cat = QComboBox()
+        cb_cat.setEditable(True)
+        cb_cat.addItems(["Servicios", "Alquiler", "Impuestos", "Municipal", "Otros"])
+        self.tabla.setCellWidget(row, 0, cb_cat)
+        
+        self.tabla.setItem(row, 1, QTableWidgetItem("Nuevo Concepto"))
+        self.tabla.setItem(row, 2, QTableWidgetItem("0"))
+
+    def quitar_fila(self):
+        selected = self.tabla.selectedItems()
+        if selected:
+            self.tabla.removeRow(selected[0].row())
+
+    def guardar(self):
+        self.tabla.setCurrentCell(-1, -1) # Fuerza a cerrar cualquier edición activa
+        self.conceptos = []
+        for row in range(self.tabla.rowCount()):
+            widget_cat = self.tabla.cellWidget(row, 0)
+            cat = widget_cat.currentText() if widget_cat else ""
+            con = self.tabla.item(row, 1).text() if self.tabla.item(row, 1) else ""
+            try:
+                precio = float(self.tabla.item(row, 2).text()) if self.tabla.item(row, 2) else 0.0
+            except ValueError:
+                precio = 0.0
+            self.conceptos.append({"categoria": cat, "concepto": con, "precio": precio})
         self.accept()
 
 class VentanaGestion(QDialog):
@@ -105,11 +186,15 @@ class VentanaGestion(QDialog):
         self.btn_mapeo = QPushButton("Configurar Mapeo de Celdas")
         self.btn_mapeo.clicked.connect(self.abrir_mapeo)
         
+        self.btn_conceptos_edif = QPushButton("Configurar Conceptos Generales")
+        self.btn_conceptos_edif.clicked.connect(self.abrir_conceptos_edif)
+        
         form_edif.addRow("Nombre Edificio:", self.edif_nombre)
         form_edif.addRow("Dirección:", self.edif_dir)
         form_edif.addRow("Plantilla Excel:", lay_plantilla)
-        form_edif.addRow("Mapeo de Datos:", self.btn_mapeo)
         form_edif.addRow("Carpeta de Guardado:", lay_guardado)
+        form_edif.addRow("Mapeo de Datos:", self.btn_mapeo)
+        form_edif.addRow("Conceptos Fijos:", self.btn_conceptos_edif)
         
         btn_guardar_edif = QPushButton("Guardar Edificio")
         btn_guardar_edif.setStyleSheet("background-color: #27AE60; color: white; padding:8px; font-weight:bold;")
@@ -127,12 +212,16 @@ class VentanaGestion(QDialog):
         self.dep_dia = QLineEdit()
         self.dep_aumentos = QLineEdit()
         
+        self.btn_conceptos_dep = QPushButton("Configurar Conceptos Particulares")
+        self.btn_conceptos_dep.clicked.connect(self.abrir_conceptos_dep)
+        
         form_dep.addRow("Identificador:", self.dep_ident)
         form_dep.addRow("Inquilino:", self.dep_inq)
         form_dep.addRow("Inicio Contrato:", self.dep_inicio)
         form_dep.addRow("Fin Contrato:", self.dep_fin)
         form_dep.addRow("Día de Pago:", self.dep_dia)
         form_dep.addRow("Notas de Aumentos:", self.dep_aumentos)
+        form_dep.addRow("Conceptos Fijos:", self.btn_conceptos_dep)
         
         btn_guardar_dep = QPushButton("Guardar Departamento")
         btn_guardar_dep.setStyleSheet("background-color: #2980B9; color: white; padding:8px; font-weight:bold;")
@@ -149,12 +238,36 @@ class VentanaGestion(QDialog):
         self.item_actual_id = None
         self.tipo_actual = None
         self.current_mapeo = ""
+        self.current_conceptos_edif = ""
+        self.current_conceptos_dep = ""
 
     def abrir_mapeo(self):
         diag = VentanaMapeo(self, self.current_mapeo)
         if diag.exec():
             self.current_mapeo = json.dumps(diag.mapeo)
             self.btn_mapeo.setText("Configurar Mapeo de Celdas (Configurado ✔️)")
+
+    def abrir_conceptos_edif(self):
+        diag = VentanaConceptos(self, self.current_conceptos_edif, "Conceptos del Edificio")
+        if diag.exec():
+            self.current_conceptos_edif = json.dumps(diag.conceptos)
+            if diag.conceptos: self.btn_conceptos_edif.setText("Conceptos Generales (Configurado ✔️)")
+            else: self.btn_conceptos_edif.setText("Configurar Conceptos Generales")
+            
+            # Autoguardar para evitar que el usuario olvide presionar "Guardar Edificio"
+            if self.item_actual_id and self.tipo_actual == "edificio":
+                self.guardar_edificio()
+
+    def abrir_conceptos_dep(self):
+        diag = VentanaConceptos(self, self.current_conceptos_dep, "Conceptos del Departamento")
+        if diag.exec():
+            self.current_conceptos_dep = json.dumps(diag.conceptos)
+            if diag.conceptos: self.btn_conceptos_dep.setText("Conceptos Particulares (Configurado ✔️)")
+            else: self.btn_conceptos_dep.setText("Configurar Conceptos Particulares")
+            
+            # Autoguardar
+            if self.item_actual_id and self.tipo_actual == "departamento":
+                self.guardar_departamento()
 
     def buscar_plantilla(self):
         archivo, _ = QFileDialog.getOpenFileName(self, "Seleccionar Plantilla Excel", "", "Excel (*.xlsx)")
@@ -184,6 +297,19 @@ class VentanaGestion(QDialog):
                     item_e.addChild(item_d)
             item_e.setExpanded(True)
 
+    def restaurar_seleccion(self):
+        if not self.item_actual_id: return
+        for i in range(self.arbol.topLevelItemCount()):
+            item = self.arbol.topLevelItem(i)
+            if item.data(0, Qt.ItemDataRole.UserRole) == self.item_actual_id and item.data(0, Qt.ItemDataRole.UserRole+1) == self.tipo_actual:
+                item.setSelected(True)
+                return
+            for j in range(item.childCount()):
+                child = item.child(j)
+                if child.data(0, Qt.ItemDataRole.UserRole) == self.item_actual_id and child.data(0, Qt.ItemDataRole.UserRole+1) == self.tipo_actual:
+                    child.setSelected(True)
+                    return
+
     def mostrar_detalles(self):
         seleccion = self.arbol.selectedItems()
         if not seleccion:
@@ -204,8 +330,15 @@ class VentanaGestion(QDialog):
                 self.edif_plantilla.setText(edif.get("ruta_plantilla", "") or "")
                 self.edif_guardado.setText(edif.get("ruta_guardado", "") or "")
                 self.current_mapeo = edif.get("mapeo_celdas", "")
+                self.current_conceptos_edif = edif.get("conceptos_default", "")
+                
                 if self.current_mapeo: self.btn_mapeo.setText("Configurar Mapeo de Celdas (Configurado ✔️)")
                 else: self.btn_mapeo.setText("Configurar Mapeo de Celdas")
+                
+                if self.current_conceptos_edif and self.current_conceptos_edif != "[]": 
+                    self.btn_conceptos_edif.setText("Conceptos Generales (Configurado ✔️)")
+                else: 
+                    self.btn_conceptos_edif.setText("Configurar Conceptos Generales")
                 
         elif self.tipo_actual == "departamento":
             self.stacked.setCurrentWidget(self.page_depto)
@@ -218,6 +351,11 @@ class VentanaGestion(QDialog):
                 self.dep_fin.setText(dep.get("fin_contrato", "") or "")
                 self.dep_dia.setText(str(dep.get("dia_vencimiento_pago", "")))
                 self.dep_aumentos.setText(dep.get("aumentos_notas", "") or "")
+                self.current_conceptos_dep = dep.get("conceptos_default", "")
+                if self.current_conceptos_dep and self.current_conceptos_dep != "[]": 
+                    self.btn_conceptos_dep.setText("Conceptos Particulares (Configurado ✔️)")
+                else: 
+                    self.btn_conceptos_dep.setText("Configurar Conceptos Particulares")
 
     def nuevo_edificio(self):
         self.arbol.clearSelection()
@@ -228,7 +366,9 @@ class VentanaGestion(QDialog):
         self.edif_plantilla.clear()
         self.edif_guardado.clear()
         self.current_mapeo = ""
+        self.current_conceptos_edif = ""
         self.btn_mapeo.setText("Configurar Mapeo de Celdas")
+        self.btn_conceptos_edif.setText("Configurar Conceptos Generales")
         self.stacked.setCurrentWidget(self.page_edificio)
         self.edif_nombre.setFocus()
         
@@ -246,6 +386,8 @@ class VentanaGestion(QDialog):
         self.dep_fin.clear()
         self.dep_dia.clear()
         self.dep_aumentos.clear()
+        self.current_conceptos_dep = ""
+        self.btn_conceptos_dep.setText("Configurar Conceptos Particulares")
         self.stacked.setCurrentWidget(self.page_depto)
         self.dep_ident.setFocus()
 
@@ -257,11 +399,13 @@ class VentanaGestion(QDialog):
         guardado = self.edif_guardado.text().strip()
         
         if self.item_actual_id and self.tipo_actual == "edificio":
-            database.actualizar_edificio(self.item_actual_id, nombre, dir_val, plantilla, guardado, self.current_mapeo)
+            database.actualizar_edificio(self.item_actual_id, nombre, dir_val, plantilla, guardado, self.current_mapeo, self.current_conceptos_edif)
         else:
-            database.agregar_edificio(nombre, dir_val, plantilla, guardado, self.current_mapeo)
+            nuevo_id = database.agregar_edificio(nombre, dir_val, plantilla, guardado, self.current_mapeo, self.current_conceptos_edif)
+            self.item_actual_id = nuevo_id
             
         self.cargar_arbol()
+        self.restaurar_seleccion()
         
     def guardar_departamento(self):
         identificador = self.dep_ident.text().strip()
@@ -277,10 +421,12 @@ class VentanaGestion(QDialog):
             deptos = database.obtener_departamentos()
             dep = next((d for d in deptos if d["id"] == self.item_actual_id), None)
             edif_id = dep["edificio_id"] if dep else 0
-            database.guardar_departamento(self.item_actual_id, edif_id, identificador, inq, ini, fin, dia, aum)
+            database.guardar_departamento(self.item_actual_id, edif_id, identificador, inq, ini, fin, dia, aum, self.current_conceptos_dep)
         else:
             seleccion = self.arbol.selectedItems()
             edif_id = seleccion[0].data(0, Qt.ItemDataRole.UserRole)
-            database.guardar_departamento(None, edif_id, identificador, inq, ini, fin, dia, aum)
+            # En SQLite insertar y no retornar el ID puede ser un tema, pero lo agregamos
+            database.guardar_departamento(None, edif_id, identificador, inq, ini, fin, dia, aum, self.current_conceptos_dep)
             
         self.cargar_arbol()
+        self.restaurar_seleccion()
