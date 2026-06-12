@@ -2,7 +2,7 @@
 
 <div align="center">
   <br>
-  <a href="https://drive.google.com/file/d/1SksowJMASXL5tUy4qVyoeGHKhHT67qWi/view?usp=sharing">
+  <a href="https://drive.google.com/file/d/1vcqliESwXU_84Vsl8sl5prSZR_VNXdQW/view?usp=sharing">
     <img src="https://img.shields.io/badge/📥_Descargar_Mi--Admin_Gratis-Windows_.EXE-27AE60?style=for-the-badge&logo=windows&logoColor=white" alt="Descargar Ejecutable">
   </a>
   <br><br>
