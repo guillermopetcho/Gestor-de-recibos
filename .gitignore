@@ -25,5 +25,10 @@ dist/
 
 # Entorno de Wine y scripts temporales
 .wine_env/
+.wine_env_full/
 python-installer.exe
+python-nuget.zip
+python_nuget_env/
+get-pip.py
 build_windows.sh
+build_windows_full.sh

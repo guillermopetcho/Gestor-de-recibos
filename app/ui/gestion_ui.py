@@ -9,20 +9,48 @@ class VentanaMapeo(QDialog):
     def __init__(self, parent=None, mapeo_actual=""):
         super().__init__(parent)
         self.setWindowTitle("Mapeo de Celdas Excel")
-        self.resize(350, 450)
+        self.resize(400, 500)
         self.mapeo = json.loads(mapeo_actual) if mapeo_actual else {}
         self.init_ui()
 
     def init_ui(self):
         layout = QVBoxLayout(self)
+        
+        # --- TOP CONTROLS FOR SAVED MAPPINGS ---
+        group_saved = QGroupBox("Mapeos Guardados")
+        lay_saved = QVBoxLayout()
+        
+        lay_combo = QHBoxLayout()
+        self.combo_mapeos = QComboBox()
+        self.combo_mapeos.currentIndexChanged.connect(self.cargar_mapeo_guardado)
+        self.btn_eliminar_mapeo = QPushButton("🗑️")
+        self.btn_eliminar_mapeo.setFixedWidth(40)
+        self.btn_eliminar_mapeo.clicked.connect(self.eliminar_mapeo_guardado)
+        
+        lay_combo.addWidget(self.combo_mapeos)
+        lay_combo.addWidget(self.btn_eliminar_mapeo)
+        
+        self.btn_guardar_como = QPushButton("Guardar campos actuales como Nuevo Mapeo...")
+        self.btn_guardar_como.clicked.connect(self.guardar_como_nuevo)
+        
+        lay_saved.addLayout(lay_combo)
+        lay_saved.addWidget(self.btn_guardar_como)
+        group_saved.setLayout(lay_saved)
+        
+        layout.addWidget(group_saved)
+        
+        # --- FORM FIELDS ---
         form = QFormLayout()
         
         self.fields = {
+            "numero_recibo": QLineEdit(self.mapeo.get("numero_recibo", "")),
             "inquilino": QLineEdit(self.mapeo.get("inquilino", "")),
             "departamento": QLineEdit(self.mapeo.get("departamento", "")),
             "edificio": QLineEdit(self.mapeo.get("edificio", "")),
             "periodo": QLineEdit(self.mapeo.get("periodo", "")),
             "fecha": QLineEdit(self.mapeo.get("fecha", "")),
+            "inicio_contrato": QLineEdit(self.mapeo.get("inicio_contrato", "")),
+            "fin_contrato": QLineEdit(self.mapeo.get("fin_contrato", "")),
             "total": QLineEdit(self.mapeo.get("total", "")),
             "tabla_fila": QLineEdit(self.mapeo.get("tabla_fila", "")),
             "tabla_col_cant": QLineEdit(self.mapeo.get("tabla_col_cant", "")),
@@ -37,14 +65,59 @@ class VentanaMapeo(QDialog):
             else: v.setPlaceholderText("Ej: C5")
             form.addRow(f"{k.replace('tabla_col_', 'Columna ').capitalize()}:", v)
             
-        btn_save = QPushButton("Guardar Mapeo")
+        btn_save = QPushButton("Confirmar Mapeo para este Edificio")
+        btn_save.setStyleSheet("background-color: #27AE60; color: white; padding:8px; font-weight:bold;")
         btn_save.clicked.connect(self.guardar)
+        
         layout.addLayout(form)
         layout.addWidget(btn_save)
+        
+        self.refrescar_combo_mapeos()
+
+    def refrescar_combo_mapeos(self):
+        self.combo_mapeos.blockSignals(True)
+        self.combo_mapeos.clear()
+        self.combo_mapeos.addItem("-- Seleccionar Mapeo Guardado --", None)
+        mapeos_db = database.obtener_mapeos_guardados()
+        for m in mapeos_db:
+            self.combo_mapeos.addItem(m["nombre"], m["id"])
+        self.combo_mapeos.blockSignals(False)
+        
+    def cargar_mapeo_guardado(self):
+        m_id = self.combo_mapeos.currentData()
+        if not m_id: return
+        mapeos_db = database.obtener_mapeos_guardados()
+        mapeo = next((m for m in mapeos_db if m["id"] == m_id), None)
+        if mapeo:
+            data = json.loads(mapeo["contenido"])
+            for k, v in data.items():
+                if k in self.fields:
+                    self.fields[k].setText(v)
+                    
+    def guardar_como_nuevo(self):
+        from PyQt6.QtWidgets import QInputDialog
+        nombre, ok = QInputDialog.getText(self, "Guardar Mapeo", "Nombre para este mapeo (Ej: Plantilla Tipo A):")
+        if ok and nombre.strip():
+            mapeo_actual = {k: v.text().strip().upper() for k, v in self.fields.items()}
+            database.guardar_mapeo_guardado(nombre.strip(), json.dumps(mapeo_actual))
+            self.refrescar_combo_mapeos()
+            QMessageBox.information(self, "Éxito", f"Mapeo '{nombre.strip()}' guardado correctamente.")
+            
+    def eliminar_mapeo_guardado(self):
+        m_id = self.combo_mapeos.currentData()
+        if not m_id:
+            QMessageBox.warning(self, "Aviso", "Selecciona un mapeo de la lista para eliminar.")
+            return
+        resp = QMessageBox.question(self, "Confirmar", "¿Eliminar este mapeo guardado?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if resp == QMessageBox.StandardButton.Yes:
+            database.eliminar_mapeo_guardado(m_id)
+            self.combo_mapeos.setCurrentIndex(0)
+            self.refrescar_combo_mapeos()
 
     def guardar(self):
         self.mapeo = {k: v.text().strip().upper() for k, v in self.fields.items()}
         self.accept()
+
 
 from PyQt6.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView
 
@@ -207,6 +280,8 @@ class VentanaGestion(QDialog):
         self.dep_ident = QLineEdit()
         self.dep_ident.setPlaceholderText("Ej: 1A, PB C, Local 1")
         self.dep_inq = QLineEdit()
+        self.dep_nro_recibo = QLineEdit()
+        self.dep_nro_recibo.setPlaceholderText("Ej: 1 (Se autoincrementa)")
         self.dep_inicio = QLineEdit()
         self.dep_fin = QLineEdit()
         self.dep_dia = QLineEdit()
@@ -217,6 +292,7 @@ class VentanaGestion(QDialog):
         
         form_dep.addRow("Identificador:", self.dep_ident)
         form_dep.addRow("Inquilino:", self.dep_inq)
+        form_dep.addRow("Nro Recibo Actual:", self.dep_nro_recibo)
         form_dep.addRow("Inicio Contrato:", self.dep_inicio)
         form_dep.addRow("Fin Contrato:", self.dep_fin)
         form_dep.addRow("Día de Pago:", self.dep_dia)
@@ -226,7 +302,16 @@ class VentanaGestion(QDialog):
         btn_guardar_dep = QPushButton("Guardar Departamento")
         btn_guardar_dep.setStyleSheet("background-color: #2980B9; color: white; padding:8px; font-weight:bold;")
         btn_guardar_dep.clicked.connect(self.guardar_departamento)
-        form_dep.addRow("", btn_guardar_dep)
+        
+        btn_eliminar_dep = QPushButton("🗑️ Eliminar")
+        btn_eliminar_dep.setStyleSheet("background-color: #E74C3C; color: white; padding:8px; font-weight:bold;")
+        btn_eliminar_dep.clicked.connect(self.eliminar_departamento)
+        
+        lay_btns_dep = QHBoxLayout()
+        lay_btns_dep.addWidget(btn_guardar_dep)
+        lay_btns_dep.addWidget(btn_eliminar_dep)
+        
+        form_dep.addRow("", lay_btns_dep)
         
         self.stacked.addWidget(self.page_vacio)
         self.stacked.addWidget(self.page_edificio)
@@ -347,6 +432,7 @@ class VentanaGestion(QDialog):
             if dep:
                 self.dep_ident.setText(dep["identificador"])
                 self.dep_inq.setText(dep.get("inquilino", "") or "")
+                self.dep_nro_recibo.setText(str(dep.get("numero_recibo") or 1))
                 self.dep_inicio.setText(dep.get("inicio_contrato", "") or "")
                 self.dep_fin.setText(dep.get("fin_contrato", "") or "")
                 self.dep_dia.setText(str(dep.get("dia_vencimiento_pago", "")))
@@ -382,6 +468,7 @@ class VentanaGestion(QDialog):
         self.tipo_actual = "departamento"
         self.dep_ident.clear()
         self.dep_inq.clear()
+        self.dep_nro_recibo.setText("1")
         self.dep_inicio.clear()
         self.dep_fin.clear()
         self.dep_dia.clear()
@@ -417,16 +504,34 @@ class VentanaGestion(QDialog):
         dia = self.dep_dia.text().strip()
         aum = self.dep_aumentos.text().strip()
         
+        try: nro_rec = int(self.dep_nro_recibo.text().strip())
+        except ValueError: nro_rec = 1
+        
         if self.item_actual_id and self.tipo_actual == "departamento":
             deptos = database.obtener_departamentos()
             dep = next((d for d in deptos if d["id"] == self.item_actual_id), None)
             edif_id = dep["edificio_id"] if dep else 0
-            database.guardar_departamento(self.item_actual_id, edif_id, identificador, inq, ini, fin, dia, aum, self.current_conceptos_dep)
+            database.guardar_departamento(self.item_actual_id, edif_id, identificador, inq, ini, fin, dia, aum, self.current_conceptos_dep, nro_rec)
         else:
             seleccion = self.arbol.selectedItems()
             edif_id = seleccion[0].data(0, Qt.ItemDataRole.UserRole)
             # En SQLite insertar y no retornar el ID puede ser un tema, pero lo agregamos
-            database.guardar_departamento(None, edif_id, identificador, inq, ini, fin, dia, aum, self.current_conceptos_dep)
+            database.guardar_departamento(None, edif_id, identificador, inq, ini, fin, dia, aum, self.current_conceptos_dep, nro_rec)
             
         self.cargar_arbol()
         self.restaurar_seleccion()
+
+    def eliminar_departamento(self):
+        if not self.item_actual_id or self.tipo_actual != "departamento":
+            QMessageBox.warning(self, "Aviso", "No hay ningún departamento seleccionado o no ha sido guardado aún.")
+            return
+            
+        resp = QMessageBox.question(self, "Confirmar Eliminación",
+                                    "¿Estás seguro de que deseas eliminar este departamento? Se eliminarán todos sus recibos asociados de forma permanente.",
+                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if resp == QMessageBox.StandardButton.Yes:
+            database.eliminar_departamento(self.item_actual_id)
+            self.item_actual_id = None
+            self.tipo_actual = None
+            self.stacked.setCurrentWidget(self.page_vacio)
+            self.cargar_arbol()

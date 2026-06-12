@@ -26,6 +26,12 @@ def init_database():
 
     c.execute("""CREATE TABLE IF NOT EXISTS configuracion (clave TEXT PRIMARY KEY, valor TEXT)""")
 
+    c.execute("""CREATE TABLE IF NOT EXISTS mapeos_guardados (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nombre TEXT NOT NULL UNIQUE,
+        contenido TEXT NOT NULL
+    )""")
+
     c.execute("""CREATE TABLE IF NOT EXISTS edificios (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nombre TEXT NOT NULL,
@@ -64,6 +70,11 @@ def init_database():
     except sqlite3.OperationalError:
         pass
 
+    try:
+        c.execute("ALTER TABLE departamentos ADD COLUMN numero_recibo INTEGER DEFAULT 1")
+    except sqlite3.OperationalError:
+        pass
+
     c.execute("""CREATE TABLE IF NOT EXISTS conceptos_edificio (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         edificio_id INTEGER NOT NULL,
@@ -87,6 +98,11 @@ def init_database():
 
     try:
         c.execute("ALTER TABLE recibos ADD COLUMN nota TEXT DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass
+        
+    try:
+        c.execute("ALTER TABLE recibos ADD COLUMN numero_recibo INTEGER")
     except sqlite3.OperationalError:
         pass
 
@@ -119,6 +135,25 @@ def obtener_config(clave=None):
 def guardar_config(clave, valor):
     conn = get_connection()
     conn.execute("INSERT OR REPLACE INTO configuracion (clave, valor) VALUES (?, ?)", (clave, valor))
+    conn.commit()
+    conn.close()
+
+# --- MAPEOS GUARDADOS ---
+def obtener_mapeos_guardados():
+    conn = get_connection()
+    rows = conn.execute("SELECT * FROM mapeos_guardados ORDER BY nombre").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def guardar_mapeo_guardado(nombre, contenido):
+    conn = get_connection()
+    conn.execute("INSERT OR REPLACE INTO mapeos_guardados (nombre, contenido) VALUES (?, ?)", (nombre, contenido))
+    conn.commit()
+    conn.close()
+
+def eliminar_mapeo_guardado(id):
+    conn = get_connection()
+    conn.execute("DELETE FROM mapeos_guardados WHERE id=?", (id,))
     conn.commit()
     conn.close()
 
@@ -166,23 +201,34 @@ def obtener_departamentos(edificio_id=None):
     conn.close()
     return [dict(r) for r in rows]
 
-def guardar_departamento(dep_id, edificio_id, identificador, inquilino, inicio, fin, dia, aumentos, conceptos_default=""):
+def guardar_departamento(dep_id, edificio_id, identificador, inquilino, inicio, fin, dia, aumentos, conceptos_default="", numero_recibo=1):
     conn = get_connection()
     c = conn.cursor()
     if dep_id:
         c.execute("""UPDATE departamentos SET identificador=?, inquilino=?, inicio_contrato=?, 
-                     fin_contrato=?, dia_vencimiento_pago=?, aumentos_notas=?, conceptos_default=? WHERE id=?""",
-                  (identificador, inquilino, inicio, fin, dia, aumentos, conceptos_default, dep_id))
+                     fin_contrato=?, dia_vencimiento_pago=?, aumentos_notas=?, conceptos_default=?, numero_recibo=? WHERE id=?""",
+                  (identificador, inquilino, inicio, fin, dia, aumentos, conceptos_default, numero_recibo, dep_id))
     else:
         c.execute("""INSERT INTO departamentos (edificio_id, identificador, inquilino, inicio_contrato, 
-                     fin_contrato, dia_vencimiento_pago, aumentos_notas, conceptos_default) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                  (edificio_id, identificador, inquilino, inicio, fin, dia, aumentos, conceptos_default))
+                     fin_contrato, dia_vencimiento_pago, aumentos_notas, conceptos_default, numero_recibo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                  (edificio_id, identificador, inquilino, inicio, fin, dia, aumentos, conceptos_default, numero_recibo))
     conn.commit()
     conn.close()
 
 def actualizar_conceptos_departamento(dep_id, conceptos_default):
     conn = get_connection()
     conn.execute("UPDATE departamentos SET conceptos_default=? WHERE id=?", (conceptos_default, dep_id))
+    conn.commit()
+    conn.close()
+
+def eliminar_departamento(dep_id):
+    conn = get_connection()
+    # Eliminar items de recibos asociados
+    conn.execute("DELETE FROM recibo_items WHERE recibo_id IN (SELECT id FROM recibos WHERE departamento_id=?)", (dep_id,))
+    # Eliminar recibos asociados
+    conn.execute("DELETE FROM recibos WHERE departamento_id=?", (dep_id,))
+    # Eliminar el departamento
+    conn.execute("DELETE FROM departamentos WHERE id=?", (dep_id,))
     conn.commit()
     conn.close()
 
@@ -210,7 +256,7 @@ def limpiar_conceptos_edificio(edificio_id):
 def obtener_recibos():
     conn = get_connection()
     rows = conn.execute("""
-        SELECT r.*, d.identificador, d.inquilino, e.nombre as edificio_nombre
+        SELECT r.*, d.identificador, d.inquilino, d.inicio_contrato, d.fin_contrato, e.nombre as edificio_nombre
         FROM recibos r 
         JOIN departamentos d ON r.departamento_id = d.id
         JOIN edificios e ON d.edificio_id = e.id
@@ -222,7 +268,7 @@ def obtener_recibos():
 def obtener_recibo(recibo_id):
     conn = get_connection()
     row = conn.execute("""
-        SELECT r.*, d.identificador, d.inquilino, e.nombre as edificio_nombre, e.ruta_plantilla, e.ruta_guardado, e.mapeo_celdas
+        SELECT r.*, d.identificador, d.inquilino, d.inicio_contrato, d.fin_contrato, e.nombre as edificio_nombre, e.ruta_plantilla, e.ruta_guardado, e.mapeo_celdas
         FROM recibos r 
         JOIN departamentos d ON r.departamento_id = d.id
         JOIN edificios e ON d.edificio_id = e.id
@@ -234,8 +280,14 @@ def obtener_recibo(recibo_id):
 def crear_recibo(departamento_id, periodo):
     conn = get_connection()
     c = conn.cursor()
-    c.execute("INSERT INTO recibos (departamento_id, periodo) VALUES (?, ?)", (departamento_id, periodo))
+    row = c.execute("SELECT numero_recibo FROM departamentos WHERE id=?", (departamento_id,)).fetchone()
+    nro_recibo = row["numero_recibo"] if row and row["numero_recibo"] is not None else 1
+    
+    c.execute("INSERT INTO recibos (departamento_id, periodo, numero_recibo) VALUES (?, ?, ?)", (departamento_id, periodo, nro_recibo))
     new_id = c.lastrowid
+    
+    c.execute("UPDATE departamentos SET numero_recibo = numero_recibo + 1 WHERE id=?", (departamento_id,))
+    
     conn.commit()
     conn.close()
     return new_id

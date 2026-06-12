@@ -43,6 +43,9 @@ def generar_recibo_excel(recibo_id):
             "{{PERIODO}}": recibo.get("periodo", "") or "",
             "{{FECHA}}": str(recibo.get("fecha_emision", "")).split(" ")[0],
             "{{TOTAL}}": str(recibo.get("total", 0.0)),
+            "{{NUMERO_RECIBO}}": str(recibo.get("numero_recibo", "") or ""),
+            "{{INICIO_CONTRATO}}": recibo.get("inicio_contrato", "") or "",
+            "{{FIN_CONTRATO}}": recibo.get("fin_contrato", "") or "",
         }
         
         mapeo_celdas = recibo.get("mapeo_celdas", "")
@@ -59,6 +62,9 @@ def generar_recibo_excel(recibo_id):
             if mapeo.get("periodo"): ws[mapeo["periodo"]] = reemplazos["{{PERIODO}}"]
             if mapeo.get("fecha"): ws[mapeo["fecha"]] = reemplazos["{{FECHA}}"]
             if mapeo.get("total"): ws[mapeo["total"]] = reemplazos["{{TOTAL}}"]
+            if mapeo.get("numero_recibo"): ws[mapeo["numero_recibo"]] = reemplazos["{{NUMERO_RECIBO}}"]
+            if mapeo.get("inicio_contrato"): ws[mapeo["inicio_contrato"]] = reemplazos["{{INICIO_CONTRATO}}"]
+            if mapeo.get("fin_contrato"): ws[mapeo["fin_contrato"]] = reemplazos["{{FIN_CONTRATO}}"]
             
             fila_inicio = mapeo.get("tabla_fila")
             if fila_inicio and fila_inicio.isdigit():
