@@ -17,14 +17,27 @@
 
 ## 📘 Guía Rápida y Manual de Usuario
 
-### 1. Gestión de Propiedades (Agregar, Editar, Eliminar)
-El primer paso en Mi-Admin es configurar tus propiedades.
-* **Crear Edificios:** Desde la "Configuración de Edificios", puedes agregar un nuevo edificio con su nombre y dirección. Aquí también configuras qué **Plantilla de Excel** utilizará.
-* **Crear Departamentos:** Selecciona un edificio en el árbol de la izquierda y haz clic en `+ Depto al Edif`. Podrás establecer el nombre del inquilino, día de pago, fechas de contrato (Inicio/Fin) y establecer desde qué número de recibo quieres empezar.
-* **Editar/Eliminar:** Simplemente selecciona el departamento o edificio de la lista. Podrás modificar cualquier valor y presionar "Guardar". Si decides usar el botón "🗑️ Eliminar" en un departamento, el sistema purgará todos los recibos y el historial asociado a él para mantener la base de datos limpia.
+### 1. Gestión de Edificios y Departamentos (CRUD Completo)
+El módulo "Administrar Propiedades" es el corazón del sistema. Aquí puedes llevar el control absoluto de tus inquilinos:
+
+* **🏗️ Crear un Edificio:** 
+  1. Presiona el botón `+ Nuevo Edificio` en el panel izquierdo.
+  2. Llena su "Nombre" (Ej: *Torres del Sol*), "Dirección" y asigna la ruta del archivo `.xlsx` (Plantilla de Excel pre-diseñada) que se usará para generar los recibos.
+  3. Haz clic en **Guardar Edificio**.
+* **🚪 Agregar un Departamento a un Edificio:**
+  1. En el árbol de navegación izquierdo, selecciona primero el edificio al que le quieres agregar el departamento.
+  2. Presiona `+ Depto al Edif.`.
+  3. Llena los datos del inquilino: *Identificador (Ej: 1A)*, *Nombre del Inquilino*, *Inicio y Fin de Contrato*, y *Día de Vencimiento*.
+  4. Configura el **Nro de Recibo Inicial** (por defecto es 1). El sistema sumará +1 automáticamente a este número cada mes que generes un recibo.
+  5. Haz clic en **Guardar Departamento**.
+* **✏️ Editar Información:** Selecciona cualquier elemento en el árbol de la izquierda, cambia los textos en el formulario de la derecha y dale a "Guardar".
+* **🗑️ Sistema de Eliminación Seguro (Papelera):**
+  * **Eliminar Departamento:** Haz clic en "🗑️ Eliminar". Esto pedirá confirmación y moverá al inquilino, junto con todos sus recibos y el historial de cobros, a la Papelera para mantener la base de datos veloz y limpia.
+  * **Eliminar Edificio Completo:** Por seguridad extrema, para eliminar un edificio entero deberás escribir literalmente `ELIMINAR NOMBRE_DEL_EDIFICIO` en la ventana de confirmación.
+  * **Restauración/Auditoría:** En el panel izquierdo tienes el botón **🗑️ Papelera**. Al hacer clic, podrás ver en código crudo (`JSON`) todos los datos que fueron borrados, junto con la fecha y hora exacta de su eliminación, por si hubo algún error humano y requieres auditarlo.
 
 ### 2. ¿Cómo funciona la Jerarquía de Conceptos?
-El sistema evita que tengas que cargar el mismo concepto de cobro 20 veces. Se basa en una herencia inteligente:
+El sistema evita que tengas que cargar el mismo concepto de cobro repetidas veces. Se basa en una herencia inteligente:
 
 ```mermaid
 graph TD
@@ -34,14 +47,50 @@ graph TD
         C --> D((Suma Total<br>Automática))
     end
 ```
-**Ejemplo de uso:** Al configurar un Edificio, le asignas el concepto *"Luz Común: $500"*. Luego, a cada Departamento le asignas su valor de *"Alquiler"*. Cuando generas el recibo del mes, el sistema unifica automáticamente el Alquiler con los $500 de luz para todos.
+**Ejemplo de uso:** Al configurar un Edificio, entras a **"Configurar Conceptos Generales"** y agregas *"Luz Común: $5000"*. Luego, seleccionas el Departamento 1A, entras a **"Configurar Conceptos Particulares"** y agregas *"Alquiler: $150000"*. Al generar el recibo del mes, Mi-Admin los fusiona para crear un borrador total a cobrar de $155000.
 
-### 3. Mapeo de Plantillas Excel (Templates)
-En lugar de forzarte a usar un formato de recibo aburrido predeterminado, **Mi-Admin se adapta a tu propio diseño de Excel**.
-1. En la configuración del Edificio, ve a **"Configurar Mapeo de Celdas"**.
-2. Dile al sistema exactamente dónde imprimir cada cosa (Ej: "Columna de Total: C15", "Inquilino: B2").
-3. **Guardar Mapeo:** Puedes presionar "Guardar como Nuevo Mapeo" para almacenar esta configuración.
-4. **Reutilizar:** Al crear un nuevo edificio, no tienes que volver a escribir B2, C15, etc. Simplemente abres el menú desplegable superior, seleccionas tu mapeo guardado y todo se autocompletará.
+### 3. Macros y Mapeo de Plantillas Excel (Templates)
+**Mi-Admin se adapta a tu propio diseño de Excel, no al revés.** Tienes dos formas de vincular la base de datos a tus archivos para imprimirlos:
+
+* **A) Por Mapeo de Celdas (Coordenadas Exactas):**
+  1. En la configuración del Edificio, ve a **"Configurar Mapeo de Celdas"**.
+  2. Escribe la coordenada donde quieres que vaya la información. Ejemplo: Si quieres que el nombre del inquilino aparezca en la celda `B4`, escribe `B4` en el campo "Inquilino". Si tu lista de gastos empieza en la fila `15`, pones `15` en "Fila" y `C` en la Columna de Precio.
+* **B) Por Etiquetas Inteligentes (Macros/Tags):**
+  * Si prefieres no usar coordenadas, simplemente abre tu plantilla de Excel y escribe en cualquier lugar las siguientes etiquetas. El sistema las reemplazará automáticamente al exportar el recibo:
+  `{{NUMERO_RECIBO}}`, `{{INQUILINO}}`, `{{DEPARTAMENTO}}`, `{{EDIFICIO}}`, `{{PERIODO}}`, `{{FECHA}}`, `{{INICIO_CONTRATO}}`, `{{FIN_CONTRATO}}`, `{{TOTAL}}`.
+
+**♻️ Guardar y Reutilizar Mapeos (Plantillas Internas):**
+Una vez que mapeaste todas tus celdas (`B4`, `C5`, `H15`...):
+1. Haz clic en **"Guardar campos actuales como Nuevo Mapeo..."** e inventa un nombre (Ej: *Plantilla de Expensas Tipo A*).
+2. Cuando des de alta un segundo Edificio, no tendrás que tipear las coordenadas de nuevo. Simplemente despliegas la lista **"Mapeos Guardados"** en la parte superior, seleccionas esa plantilla y ¡todos los campos se autocompletarán mágicamente!
+
+### 4. Configuración del Sistema (Ajustes Globales)
+El botón "⚙️ Configuración" en la pantalla principal te permite personalizar el comportamiento general de todo el programa. Este panel está dividido en 4 pestañas:
+
+1. **🏢 Empresa:** Aquí cargas los datos de tu administración (Nombre o Razón Social, Dirección, Teléfono y Email). Estos datos se guardan en la base de datos y en el futuro podrán ser usados para membretes automáticos.
+2. **🎨 Apariencia:** 
+   * **Tema Visual:** Te permite elegir entre un Modo Claro (por defecto) o un Modo Oscuro (nocturno) para reducir la fatiga visual.
+   * **Símbolo de Moneda:** Configura cómo quieres que se muestre el dinero en el sistema (Pesos `$`, Dólares `U$D` o Euros `€`).
+3. **📁 Rutas y Archivos:**
+   * **Carpeta de Recibos:** Selecciona en qué carpeta de tu computadora quieres que se guarden todos los recibos exportados.
+   * **Formato de Salida:** Elige si quieres que el programa solo te exporte los archivos `.xlsx` rellenados, o si prefieres el ciclo completo `Excel y PDF` (el sistema exportará el Excel y luego usará LibreOffice en segundo plano para convertirlo a un PDF inmodificable).
+4. **💬 Comunicaciones:** Escribe una plantilla o borrador de mensaje para enviar por WhatsApp. *(Ej: "Hola, adjunto el recibo de tu alquiler correspondiente al mes...")*. Esta pestaña dejará todo preparado para las futuras integraciones de envío automatizado.
+
+### 5. Cómo Generar, Editar y Exportar Recibos
+El botón verde y gigante **"Generar Recibos"** en el panel principal es inteligente y tiene una doble función (Borrador -> Exportación) dependiendo de qué selecciones en la pantalla:
+
+* **Fase 1: Creación de Borradores (Tildar a la Derecha)**
+  1. En el árbol de la derecha ("Edificios y Departamentos"), haz clic en las casillas (checkboxes) de los inquilinos a los que les quieres facturar este mes. Puedes tildar un edificio entero para seleccionar todos sus departamentos de golpe.
+  2. Haz clic en **Generar Recibos**.
+  3. El sistema fusionará los conceptos, sumará los precios, calculará todo, avanzará un número el contador del inquilino y creará los recibos en estado **Borrador**. Estos aparecerán instantáneamente en la tabla de la izquierda.
+* **Fase 2: Edición y Control (Tabla de la Izquierda)**
+  1. Haz clic sobre uno o varios de los recibos que acaban de aparecer en la tabla izquierda.
+  2. En el panel inferior verás el detalle exacto: Puedes hacer doble clic en el precio o la cantidad de cualquier ítem para modificarlo al vuelo (Ej: Si este mes le cobras un recargo extra). También puedes editar el Período, la Fecha o sumarle una "Nota" (haciendo clic en el ícono 📝 de la tabla).
+  3. *Tip: Si haces clic derecho sobre un recibo, podrás eliminarlo o duplicarlo.*
+* **Fase 3: Emisión Final y Exportación (Seleccionar a la Izquierda)**
+  1. Cuando los borradores estén listos y verificados, simplemente selecciónalos haciendo clic (o arrastrando el ratón) sobre ellos en la tabla de la izquierda.
+  2. Vuelve a hacer clic en el botón verde gigante **Generar Recibos**.
+  3. ¡Magia! El sistema tomará cada recibo, abrirá tu plantilla de Excel sin que lo notes, inyectará todos los datos en sus coordenadas, lo guardará en tu carpeta de Recibos y (si lo configuraste así) lo convertirá a un PDF inviolable listo para enviar.
 
 ---
 

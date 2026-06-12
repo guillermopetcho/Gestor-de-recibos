@@ -26,6 +26,14 @@ def init_database():
 
     c.execute("""CREATE TABLE IF NOT EXISTS configuracion (clave TEXT PRIMARY KEY, valor TEXT)""")
 
+    c.execute("""CREATE TABLE IF NOT EXISTS papelera (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tipo TEXT,
+        nombre TEXT,
+        datos_json TEXT,
+        fecha TEXT DEFAULT (datetime('now','localtime'))
+    )""")
+
     c.execute("""CREATE TABLE IF NOT EXISTS mapeos_guardados (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nombre TEXT NOT NULL UNIQUE,
@@ -157,6 +165,25 @@ def eliminar_mapeo_guardado(id):
     conn.commit()
     conn.close()
 
+# --- PAPELERA ---
+def guardar_en_papelera(tipo, nombre, datos_json):
+    conn = get_connection()
+    conn.execute("INSERT INTO papelera (tipo, nombre, datos_json) VALUES (?, ?, ?)", (tipo, nombre, datos_json))
+    conn.commit()
+    conn.close()
+
+def obtener_papelera():
+    conn = get_connection()
+    rows = conn.execute("SELECT * FROM papelera ORDER BY fecha DESC").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def vaciar_papelera():
+    conn = get_connection()
+    conn.execute("DELETE FROM papelera")
+    conn.commit()
+    conn.close()
+
 # --- EDIFICIOS ---
 def obtener_edificios():
     conn = get_connection()
@@ -184,6 +211,22 @@ def actualizar_edificio(edificio_id, nombre, direccion, ruta_plantilla, ruta_gua
 def actualizar_conceptos_edificio(edificio_id, conceptos_default):
     conn = get_connection()
     conn.execute("UPDATE edificios SET conceptos_default=? WHERE id=?", (conceptos_default, edificio_id))
+    conn.commit()
+    conn.close()
+
+def eliminar_edificio(edificio_id):
+    import json
+    conn = get_connection()
+    edif = conn.execute("SELECT * FROM edificios WHERE id=?", (edificio_id,)).fetchone()
+    if edif:
+        guardar_en_papelera("Edificio", edif["nombre"], json.dumps(dict(edif)))
+        
+    deps = conn.execute("SELECT id FROM departamentos WHERE edificio_id=?", (edificio_id,)).fetchall()
+    for d in deps:
+        eliminar_departamento(d["id"])
+        
+    conn.execute("DELETE FROM conceptos_edificio WHERE edificio_id=?", (edificio_id,))
+    conn.execute("DELETE FROM edificios WHERE id=?", (edificio_id,))
     conn.commit()
     conn.close()
 
@@ -222,7 +265,11 @@ def actualizar_conceptos_departamento(dep_id, conceptos_default):
     conn.close()
 
 def eliminar_departamento(dep_id):
+    import json
     conn = get_connection()
+    dep = conn.execute("SELECT * FROM departamentos WHERE id=?", (dep_id,)).fetchone()
+    if dep:
+        guardar_en_papelera("Departamento", dep["identificador"], json.dumps(dict(dep)))
     # Eliminar items de recibos asociados
     conn.execute("DELETE FROM recibo_items WHERE recibo_id IN (SELECT id FROM recibos WHERE departamento_id=?)", (dep_id,))
     # Eliminar recibos asociados

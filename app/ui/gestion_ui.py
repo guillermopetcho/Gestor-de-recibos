@@ -200,6 +200,38 @@ class VentanaConceptos(QDialog):
             self.conceptos.append({"categoria": cat, "concepto": con, "precio": precio})
         self.accept()
 
+class VentanaPapelera(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Papelera de Reciclaje (Registros Eliminados)")
+        self.resize(700, 400)
+        self.init_ui()
+        
+    def init_ui(self):
+        layout = QVBoxLayout(self)
+        self.lista = QTreeWidget()
+        self.lista.setHeaderLabels(["Fecha", "Tipo", "Nombre", "Datos Originales (JSON)"])
+        self.lista.header().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        
+        registros = database.obtener_papelera()
+        for r in registros:
+            item = QTreeWidgetItem([str(r["fecha"]), str(r["tipo"]), str(r["nombre"]), str(r["datos_json"])])
+            self.lista.addTopLevelItem(item)
+            
+        btn_vaciar = QPushButton("🗑️ Vaciar Papelera Definitivamente")
+        btn_vaciar.setStyleSheet("background-color: #E74C3C; color: white; padding:5px; font-weight:bold;")
+        btn_vaciar.clicked.connect(self.vaciar)
+        
+        layout.addWidget(self.lista)
+        layout.addWidget(btn_vaciar)
+        
+    def vaciar(self):
+        resp = QMessageBox.question(self, "Vaciar Papelera", "¿Estás seguro de que deseas eliminar permanentemente todo el historial de la papelera? Esto no se puede deshacer.", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if resp == QMessageBox.StandardButton.Yes:
+            database.vaciar_papelera()
+            self.lista.clear()
+            QMessageBox.information(self, "Vaciada", "La papelera ha sido vaciada.")
+
 class VentanaGestion(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -227,8 +259,12 @@ class VentanaGestion(QDialog):
         botones_layout.addWidget(btn_nuevo_edif)
         botones_layout.addWidget(btn_nuevo_dep)
         
+        btn_papelera = QPushButton("🗑️ Papelera")
+        btn_papelera.clicked.connect(self.ver_papelera)
+        
         left_panel.addWidget(self.arbol)
         left_panel.addLayout(botones_layout)
+        left_panel.addWidget(btn_papelera)
         
         # --- Panel Derecho: Stacked Widget ---
         self.stacked = QStackedWidget()
@@ -272,7 +308,16 @@ class VentanaGestion(QDialog):
         btn_guardar_edif = QPushButton("Guardar Edificio")
         btn_guardar_edif.setStyleSheet("background-color: #27AE60; color: white; padding:8px; font-weight:bold;")
         btn_guardar_edif.clicked.connect(self.guardar_edificio)
-        form_edif.addRow("", btn_guardar_edif)
+        
+        btn_eliminar_edif = QPushButton("🗑️ Eliminar Edificio")
+        btn_eliminar_edif.setStyleSheet("background-color: #C0392B; color: white; padding:8px; font-weight:bold;")
+        btn_eliminar_edif.clicked.connect(self.eliminar_edificio)
+        
+        lay_btns_edif = QHBoxLayout()
+        lay_btns_edif.addWidget(btn_guardar_edif)
+        lay_btns_edif.addWidget(btn_eliminar_edif)
+        
+        form_edif.addRow("", lay_btns_edif)
         
         # Widget Departamento
         self.page_depto = QWidget()
@@ -325,6 +370,10 @@ class VentanaGestion(QDialog):
         self.current_mapeo = ""
         self.current_conceptos_edif = ""
         self.current_conceptos_dep = ""
+
+    def ver_papelera(self):
+        diag = VentanaPapelera(self)
+        diag.exec()
 
     def abrir_mapeo(self):
         diag = VentanaMapeo(self, self.current_mapeo)
@@ -535,3 +584,25 @@ class VentanaGestion(QDialog):
             self.tipo_actual = None
             self.stacked.setCurrentWidget(self.page_vacio)
             self.cargar_arbol()
+            QMessageBox.information(self, "Eliminado", "El departamento fue eliminado y guardado en la papelera.")
+
+    def eliminar_edificio(self):
+        if not self.item_actual_id or self.tipo_actual != "edificio":
+            QMessageBox.warning(self, "Aviso", "No hay ningún edificio seleccionado o no ha sido guardado aún.")
+            return
+            
+        nombre_edif = self.edif_nombre.text().strip()
+        from PyQt6.QtWidgets import QInputDialog
+        texto, ok = QInputDialog.getText(self, "Eliminar Edificio Completo", 
+                                        f"¡PELIGRO! Se eliminará el edificio, TODOS sus departamentos y TODOS los recibos.\\n\\nPara confirmar, escribe exactamente:\\nELIMINAR {nombre_edif.upper()}")
+        
+        if ok:
+            if texto == f"ELIMINAR {nombre_edif.upper()}":
+                database.eliminar_edificio(self.item_actual_id)
+                self.item_actual_id = None
+                self.tipo_actual = None
+                self.stacked.setCurrentWidget(self.page_vacio)
+                self.cargar_arbol()
+                QMessageBox.information(self, "Eliminado", "El edificio completo fue eliminado y sus datos fueron movidos a la papelera.")
+            else:
+                QMessageBox.warning(self, "Cancelado", "El texto ingresado no coincide. Operación cancelada por seguridad.")
