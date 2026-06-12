@@ -1,5 +1,19 @@
 # Mi-Admin: Gestor de Recibos Inmobiliarios 🏢📄
 
+<div align="center">
+  <br>
+  <a href="https://drive.google.com/file/d/1SksowJMASXL5tUy4qVyoeGHKhHT67qWi/view?usp=sharing">
+    <img src="https://img.shields.io/badge/📥_Descargar_Mi--Admin_Gratis-Windows_.EXE-27AE60?style=for-the-badge&logo=windows&logoColor=white" alt="Descargar Ejecutable">
+  </a>
+  <br><br>
+  <i>👆 Haz clic en el botón verde de arriba para descargar el programa listo para usar (No requiere instalación).</i>
+  <br><br>
+  <p><b>☕ ¿Te fue útil esta herramienta? ¡Puedes apoyar su desarrollo enviando una donación al alias: <code>guillermopetcho2</code>!</b></p>
+  <br>
+</div>
+
+---
+
 **Mi-Admin** es una aplicación de escritorio profesional desarrollada en Python y PyQt6 diseñada para administrar la cobranza, facturación y control de recibos de edificios y departamentos de forma 100% autónoma.
 
 ---
